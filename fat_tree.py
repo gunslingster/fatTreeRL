@@ -2,6 +2,7 @@ import math
 import random
 import networkx as nx
 import typing
+import matplotlib.pyplot as plt
 
 def genGraph(vertices: typing.List[int], edges: typing.List[typing.Tuple[int]]):
     '''Return a graph which is a tuple of vertices and edges'''
@@ -22,7 +23,6 @@ def genFatTree(k: int=4) -> typing.Tuple[typing.List[int], typing.List[typing.Tu
         for i in range(num_core_switches):
             core_switch_id = int(prefix_id + str(i))
             core_switches.append(core_switch_id)
-        print(f'Core switches: {core_switches}\n')
         return core_switches
 
     def genFatTreeAggSwitch(k: int=4) -> typing.List[int]:
@@ -33,7 +33,6 @@ def genFatTree(k: int=4) -> typing.Tuple[typing.List[int], typing.List[typing.Tu
         for i in range(num_agg_switches):
             agg_switch_id = int(prefix_id + str(i))
             agg_switches.append(agg_switch_id)
-        print(f'Agg switches: {agg_switches}\n')
         return agg_switches
 
     def genFatTreeEdgeSwitch(k: int=4) -> typing.List[int]:
@@ -44,7 +43,6 @@ def genFatTree(k: int=4) -> typing.Tuple[typing.List[int], typing.List[typing.Tu
         for i in range(num_edge_switches):
             edge_switch_id = int(prefix_id + str(i))
             edge_switches.append(edge_switch_id)
-        print(f'Edge switches: {edge_switches}\n')
         return edge_switches
 
     def genFatTreeHosts(k: int=4) -> typing.List[int]:
@@ -55,7 +53,6 @@ def genFatTree(k: int=4) -> typing.Tuple[typing.List[int], typing.List[typing.Tu
         for i in range(num_hosts):
             host_id = int(prefix_id + str(i))
             hosts.append(host_id)
-        print(f'Hosts: {hosts}\n')
         return hosts
 
     def genFatTreePods(k: int, fat_tree_agg_switches: typing.List[int],
@@ -78,7 +75,6 @@ def genFatTree(k: int=4) -> typing.Tuple[typing.List[int], typing.List[typing.Tu
             # Add the pod to the list of pods
             pods.append(pod)
             i += pod_size
-        print(f'Pods: {pods}')
         return pods
 
     def genFatTreeNodes(core_switches: typing.List[int], \
@@ -117,11 +113,14 @@ def genFatTree(k: int=4) -> typing.Tuple[typing.List[int], typing.List[typing.Tu
             # These are the pod connections
             # For each pod, each agg switch is connected to every edge switch
             edges = []
+            # Quick and dirty but inefficient way of getting the pod edges
             pods = genFatTreePods(k, agg_switches, edge_switches)
             for pod in pods:
-                for i in range(0, len(pod), 2):
-                    for j in range(1, len(pod), 2):
-                            edges.append((agg_switches[i], edge_switches[j]))
+                aggs = [node for node in pod if str(node)[0] == '2']
+                es = [node for node in pod if str(node)[0] == '3']
+                for agg_switch in aggs:
+                    for edge_switch in es:
+                        edges.append((agg_switch, edge_switch))
             return edges
         def host_edges():
             # All edges connecting edge switches to hosts
@@ -149,39 +148,28 @@ def genFatTree(k: int=4) -> typing.Tuple[typing.List[int], typing.List[typing.Tu
 def fatTreeToFlowNetwork(fat_tree: typing.List[typing.Tuple[int,int]], \
     capacity_function: typing.Callable, weight_function: typing.Callable) \
     -> typing.Tuple[int, int, nx.Graph]:
-    def genGraphFromEdges(edges: typing.List[typing.Tuple[int,int]]) -> nx.DiGraph:
+    def genGraphFromEdges(edges: typing.List[typing.Tuple[int,int]], \
+        capacity_function, weight_function) -> nx.DiGraph:
         '''Take in a list of edges and return a networkx digraph'''
         # First initialize an empty graph
         graph = nx.Graph()
-        graph.add_edges_from(edges, capacity=0, weight=0)
+        graph.add_edges_from(edges, capacity=capacity_function(1), weight=weight_function(1))
         digraph = graph.to_directed()
         return digraph
-
-    def setCapacities(graph: nx.Graph, capacity_function: typing.Callable) -> nx.Graph:
-        '''Set the capacities of a digraph given a capacity function'''
-        for edge in graph.edges:
-            graph[edge[0]][edge[1]]['capacity'] = capacity_function(edge)
-        return graph
-
-    def setWeights(graph: nx.Graph, weight_function: typing.Callable) -> nx.Graph:
-        '''Set the weights of a digraph given a weight function'''
-        for edge in graph.edges:
-            graph[edge[0]][edge[1]]['weight'] = weight_function(edge)
-        return graph
 
     def genFlowNetworkFromDigraph(graph: nx.Graph) -> typing.Tuple[int, int, nx.Graph]:
         '''A flow network consists of a source node, destination node, and a digraph
         with capacities and costs. The items returned will eventually be passed to the
         max_flow_min_cost networkx library function. For now we just choose source and sink nodes
         at random.'''
-        source_node = random.choice(list(graph.nodes()))
-        dest_node = random.choice(list(graph.nodes()))
+        while True:
+            source_node = random.choice(list(graph.nodes()))
+            dest_node = random.choice(list(graph.nodes()))
+            if source_node != dest_node:
+                break
         return (source_node, dest_node, graph)
 
-    flow_network_digraph = setWeights(setCapacities(genGraphFromEdges(fat_tree), \
-    capacity_function), weight_function)
-    for edge in flow_network_digraph.edges:
-        print(flow_network_digraph[edge[0]][edge[1]]['weight'])
+    flow_network_digraph = genGraphFromEdges(fat_tree, capacity_function, weight_function) 
     return genFlowNetworkFromDigraph(flow_network_digraph)
 
 def minCostFlow(graph: nx.Graph, source: int, dest: int) -> typing.Dict:
@@ -192,10 +180,18 @@ def minCostFlow(graph: nx.Graph, source: int, dest: int) -> typing.Dict:
 def test():
     k = 4
     nodes, edges = genFatTree(k)
-    capacity_function = lambda x: random.randint(1,10)
-    weight_function = lambda x: random.randint(1,10)
-    source, dest, graph = fatTreeToFlowNetwork(edges, capacity_function, weight_function)
-    min_cost = minCostFlow(graph, source, dest)
+    print(nodes)
+    print(edges)
+    capacity_function = lambda _: random.randint(1,10)
+    weight_function = lambda _: random.randint(1,10)
+    source, dest, flow_network = fatTreeToFlowNetwork(edges, capacity_function, weight_function)
+    print(f'Edges: {edges}')
+    print(f'source: {source}')
+    print(f'sink: {dest}')
+    mcf = minCostFlow(flow_network, source, dest)
+    print(f'MCF: {mcf}')
+    nx.draw(flow_network, with_labels=True)
+    plt.show()
 
 def main():
     test()
