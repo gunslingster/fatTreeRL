@@ -172,16 +172,20 @@ def fatTreeToFlowNetwork(fat_tree: typing.List[typing.Tuple[int,int]], \
     flow_network_digraph = genGraphFromEdges(fat_tree, capacity_function, weight_function) 
     return genFlowNetworkFromDigraph(flow_network_digraph)
 
-def minCostFlow(graph: nx.Graph, source: int, dest: int) -> typing.Dict:
-    flow_dict = nx.max_flow_min_cost(graph, source, dest)
-    min_cost = nx.cost_of_flow(graph, flow_dict)
+def minCostFlow(G: nx.Graph, source: int, sink: int) -> typing.Dict:
+    # First we have to set the demands
+    # We initialize all demands to 0 excpet source and sink
+    # A negative demand is a source, a positive demand is a sink
+    for node in G.nodes:
+        G.nodes[node]["demand"] = 0
+    G.nodes[source]["demand"] = -1
+    G.nodes[sink]["demand"] = 1
+    min_cost = nx.min_cost_flow_cost(G)
     return min_cost
 
 def test():
     k = 4
     nodes, edges = genFatTree(k)
-    print(nodes)
-    print(edges)
     capacity_function = lambda _: random.randint(1,10)
     weight_function = lambda _: random.randint(1,10)
     source, dest, flow_network = fatTreeToFlowNetwork(edges, capacity_function, weight_function)
