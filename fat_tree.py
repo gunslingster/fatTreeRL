@@ -153,7 +153,14 @@ def fatTreeToFlowNetwork(fat_tree: typing.List[typing.Tuple[int,int]], \
         '''Take in a list of edges and return a networkx digraph'''
         # First initialize an empty graph
         graph = nx.Graph()
-        graph.add_edges_from(edges, capacity=capacity_function(1), weight=weight_function(1))
+        # Now set the weights and capacities of each edge according to the
+        # weight and capacity functions
+        # To start we will just be setting these attributes randomly
+        edges_with_attributes = []
+        for edge in edges:
+            new_edge = (edge[0], edge[1], {'weight': weight_function(1), 'capacity': capacity_function(1)})
+            edges_with_attributes.append(new_edge)
+        graph.add_edges_from(edges_with_attributes)
         digraph = graph.to_directed()
         return digraph
 
@@ -183,21 +190,32 @@ def minCostFlow(G: nx.Graph, source: int, sink: int) -> typing.Dict:
     min_cost = nx.min_cost_flow_cost(G)
     return min_cost
 
+def plotFlowNetwork(G: nx.Graph):
+    capacities = nx.get_edge_attributes(G, 'capacity').values()
+    colors = nx.get_edge_attributes(G, 'weight').values()
+    for node1, node2, data in G.edges.data():
+        print(f'Edge ({node1}, {node2}): ')
+        print(f'\tweight: {data["weight"]}')
+        print(f'\tcapacity: {data["capacity"]}')
+    plt.figure(3, figsize=(12,12))
+    nx.draw(G, with_labels=True, edge_color=colors, width=list(capacities))
+    plt.show()
+
 def test():
-    k = 4
+    k = 2
     nodes, edges = genFatTree(k)
     capacity_function = lambda _: random.randint(1,10)
     weight_function = lambda _: random.randint(1,10)
     source, dest, flow_network = fatTreeToFlowNetwork(edges, capacity_function, weight_function)
+    mcf = minCostFlow(flow_network, source, dest)
+    plotFlowNetwork(flow_network)
     print(f'Edges: {edges}')
     print(f'source: {source}')
     print(f'sink: {dest}')
-    mcf = minCostFlow(flow_network, source, dest)
     print(f'MCF: {mcf}')
-    nx.draw(flow_network, with_labels=True)
-    plt.show()
 
 def main():
     test()
 
-main()
+if __name__ == '__main__':
+    main()
