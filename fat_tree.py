@@ -176,7 +176,7 @@ def fatTreeToFlowNetwork(fat_tree: typing.List[typing.Tuple[int,int]], \
                 break
         return (source_node, dest_node, graph)
 
-    flow_network_digraph = genGraphFromEdges(fat_tree, capacity_function, weight_function) 
+    flow_network_digraph = genGraphFromEdges(fat_tree, capacity_function, weight_function)
     return genFlowNetworkFromDigraph(flow_network_digraph)
 
 def minCostFlow(G: nx.Graph, source: int, sink: int) -> typing.Dict:
@@ -197,6 +197,8 @@ def plotFlowNetwork(G: nx.Graph):
         print(f'Edge ({node1}, {node2}): ')
         print(f'\tweight: {data["weight"]}')
         print(f'\tcapacity: {data["capacity"]}')
+    flow_dict = nx.min_cost_flow(G)
+    print(flow_dict)
     plt.figure(3, figsize=(12,12))
     nx.draw(G, with_labels=True, edge_color=colors, width=list(capacities))
     plt.show()
