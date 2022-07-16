@@ -49,6 +49,7 @@ def printGraph(G):
     for node in G.nodes:
         print(f'node: {node}')
         print(f'Neighbors: {G[node]}')
+    print('\n')
 
 def plotGraph(G):
     capacities = nx.get_edge_attributes(G, 'capacity').values()
@@ -111,6 +112,8 @@ def genNetwork(m, n, r, vnf_fail_prob, backup_server_fail_prob):
             G.add_edge(backup_server, m+n+1, weight=0, capacity=r)
     genNodes(G)
     genEdges(G)
+    print('Original Graph:')
+    printGraph(G)
     plotGraph(G)
     return G
 
@@ -135,8 +138,8 @@ def shortestPath(G, m, n):
         for node in range(m+1, m+n+1):
             R[node, m+n+1] = 100000000000000
         R = np.int_(R)
-        print("Reward matrix")
-        print(pd.DataFrame(data=R))
+        #print("Reward matrix")
+        #print(pd.DataFrame(data=R))
         return R
 
     def chooseNextNode(G, Q, current_node, thresh):
@@ -183,36 +186,49 @@ def shortestPath(G, m, n):
     learn(G, Q, R, 0.2, 0.8, 0.8)
     return shortest_path(G, 0, len(G.nodes)-1, Q)
 
-def residualGraph(G, path):
-    hops = len(path)
+def residualNetwork(G, path):
+    # Residual network is the same as the original graph but the 
+    # forward edges are relpaced with backward edges 
     R = G.copy()
-    R.remove_edge(0, path[1])
-    R.remove_edge(path[-2], path[-1])
-    for i in range(1, hops-2):
-        R.remove_edge(path[i], path[i+1])
-        if path[i] < path[i+1]:
-            R.add_edge(path[i+1], path[i], \
-                    weight=-G[path[i]][path[i+1]]['weight'], capacity=1)
+    for i in range(len(path)-1):
+        node1 = path[i]
+        node2 = path[i+1]
+        weight = G[node1][node2]['weight']
+        R.remove_edge(node1, node2)
+        R.add_edge(node2, node1, weight=-weight, capacity=1)
     return R
 
 def succShortestPaths(G, m, n):
+    # Find shortest path then generate residual network, do this m times
+    # Positive and negative flows will cancel out, resulting in all positive
+    # flow from vnf->backup server. The final flows will give use the optimal 
+    # mapping of vnf-> backup servers
+    # We can use the final shortest path to find the optimal mapping
     R = G.copy()
-    for num_round in range(m):
-        printGraph(R)
-        p = shortestPath(R, m, n)
-        print(p)
-        R = residualGraph(R, p)
-    printGraph(R)
+    shortest_path = []
+    for num_iters in range(m):
+        # Can use dijkstra or Q learning approach
+        shortest_path = nx.dijkstra_path(R, 0, m+n+1)
+        print(f'\n{shortest_path}\n')
+        R = residualNetwork(R, shortest_path)
+    return shortest_path 
+
+def findOptimalMapping(path):
+    optimal_mapping = []
+    for i in range(1, len(path)-1, 2):
+        optimal_mapping.append((path[i], path[i+1]))
+    print(optimal_mapping)
+    return optimal_mapping
 
 def test():
     m = 3
-    n = 3
+    n = 8 
     r = 1
     f1 = lambda _: random.uniform(0, 0.02)
     f2 = lambda _: random.uniform(0, 0.1)
     G = genNetwork(m, n, r, f1, f2)
-    succShortestPaths(G, m, n)
+    final_path = succShortestPaths(G, m, n)
+    findOptimalMapping(final_path) 
 
-    
 if __name__ == '__main__':
     test()
