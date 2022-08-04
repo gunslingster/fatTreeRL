@@ -99,17 +99,17 @@ def genNetwork(m, n, r, vnf_fail_prob, backup_server_fail_prob):
         # First add an edge from s to each vnf
         failure_probs = genFailureProbs(m, n)
         for node in range(1, m+1):
-            G.add_edge(0, node, weight=0, capacity=1)
+            G.add_edge(0, node, weight=0, capacity=1, flow=0)
         # Now add edges from each VNF to backup server
         for vnf in range (1, m+1):
             p1 = failure_probs[vnf]
             for backup_server in range(m+1, m+n+1):
                 p2 = failure_probs[backup_server]
                 w = int(math.log(1 / (1 - p1 * p2)) * 10e10)
-                G.add_edge(vnf, backup_server, weight=w, capacity=1)
+                G.add_edge(vnf, backup_server, weight=w, capacity=1, flow=0)
         # Now add edges from each backup server to the destination
         for backup_server in range(m+1, m+n+1):
-            G.add_edge(backup_server, m+n+1, weight=0, capacity=r)
+            G.add_edge(backup_server, m+n+1, weight=0, capacity=r, flow=0)
     genNodes(G)
     genEdges(G)
     print('Original Graph:')
@@ -198,6 +198,20 @@ def residualNetwork(G, path):
         R.add_edge(node2, node1, weight=-weight, capacity=1)
     return R
 
+def residualNetwork2(G, path):
+    R = G.copy()
+    for i in range(len(path)-1):
+        node1 = path[i]
+        node2 = path[i+1]
+        R[node1][node2]['capacity'] -= 1
+        weight = G[node1][node2]['weight']
+        if R[node1][node2]['capacity'] <= 0:
+            R.remove_edge(node1, node2)
+            R.add_edge(node2, node1, weight=-weight, capacity=1)
+        else:
+            R.add_edge(node2, node1, weight=-weight, capacity=1)
+    return R
+
 def succShortestPaths(G, m, n):
     # Find shortest path then generate residual network, do this m times
     # Positive and negative flows will cancel out, resulting in all positive
@@ -205,13 +219,15 @@ def succShortestPaths(G, m, n):
     # mapping of vnf-> backup servers
     # We can use the final shortest path to find the optimal mapping
     R = G.copy()
-    shortest_path = []
+    shortest_paths = []
     for num_iters in range(m):
         # Can use dijkstra or Q learning approach
         shortest_path = nx.dijkstra_path(R, 0, m+n+1)
+        shortest_paths.append(shortest_path)
         print(f'\n{shortest_path}\n')
-        R = residualNetwork(R, shortest_path)
-    return shortest_path 
+        R = residualNetwork2(R, shortest_path)
+        printGraph(R)
+    return shortest_paths
 
 def findOptimalMapping(path):
     optimal_mapping = []
@@ -220,15 +236,25 @@ def findOptimalMapping(path):
     print(optimal_mapping)
     return optimal_mapping
 
+def findOptimalMapping2(paths):
+    optimal_mapping = []
+    for path in paths:
+        for i in range(1, len(path)-2):
+            if ((path[i+1], path[i]) in optimal_mapping):
+                optimal_mapping.remove((path[i+1], path[i]))
+            else:
+                optimal_mapping.append((path[i], path[i+1]))
+    print(optimal_mapping)
+    return optimal_mapping
+
 def test():
-    m = 3
-    n = 8 
-    r = 1
+    m = 4
+    n = 2 
+    r = 2
     f1 = lambda _: random.uniform(0, 0.02)
     f2 = lambda _: random.uniform(0, 0.1)
     G = genNetwork(m, n, r, f1, f2)
-    final_path = succShortestPaths(G, m, n)
-    findOptimalMapping(final_path) 
+    final_paths = succShortestPaths(G, m, n)
+    findOptimalMapping2(final_paths) 
 
-if __name__ == '__main__':
-    test()
+test()
