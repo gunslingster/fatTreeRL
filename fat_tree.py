@@ -202,22 +202,3 @@ def plotFlowNetwork(G: nx.Graph):
     plt.figure(3, figsize=(12,12))
     nx.draw(G, with_labels=True, edge_color=colors, width=list(capacities))
     plt.show()
-
-def test():
-    k = 2
-    nodes, edges = genFatTree(k)
-    capacity_function = lambda _: random.randint(1,10)
-    weight_function = lambda _: random.randint(1,10)
-    source, dest, flow_network = fatTreeToFlowNetwork(edges, capacity_function, weight_function)
-    mcf = minCostFlow(flow_network, source, dest)
-    plotFlowNetwork(flow_network)
-    print(f'Edges: {edges}')
-    print(f'source: {source}')
-    print(f'sink: {dest}')
-    print(f'MCF: {mcf}')
-
-def main():
-    test()
-
-if __name__ == '__main__':
-    main()
