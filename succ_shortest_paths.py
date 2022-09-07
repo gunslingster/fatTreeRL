@@ -39,7 +39,8 @@ import matplotlib.pyplot as plt
 # Step 2: Implement s shorest path algorithm with Q learning. This function will
 # take a residual graph as input and output the shortest path from s->t. 
 
-# Step 3: Apply the shortest successive paths algorithm using the Q learning 
+# Step 3: Apply the shortest successive paths algorithm using the any shortest 
+# path algorithm such as dijksta, Q learning, etc. Use this shortest path
 # approach at each iteraiton. At each iteration we produce a new residual graph.
 # The algorithm will terminate when there are no possible paths left. The final
 # residual graph will yield the optimal vnf-> backup server mapping for optimal
@@ -76,12 +77,12 @@ def genNetwork(m, n, r, vnf_fail_prob, backup_server_fail_prob):
     G = nx.DiGraph()
     def genNodes(G):
         num_nodes = m + n + 2
-        G.add_node(0, layer='source')
+        G.add_node(0, layer='source', demand=-m)
         for i in range(1, m+1):
             G.add_node(i, layer='vnf')
         for i in range(m+1, m+n+1):
             G.add_node(i, layer='backup_server')
-        G.add_node(m+n+1, layer='sink')
+        G.add_node(m+n+1, layer='sink', demand=m)
     # Set source node to node 0 and sink to num_nodes-1
     # Nodes [1, m] will be VNF
     # Nodes [m+1, m+n] will be backup servers
@@ -99,17 +100,17 @@ def genNetwork(m, n, r, vnf_fail_prob, backup_server_fail_prob):
         # First add an edge from s to each vnf
         failure_probs = genFailureProbs(m, n)
         for node in range(1, m+1):
-            G.add_edge(0, node, weight=0, capacity=1, flow=0)
+            G.add_edge(0, node, weight=0, capacity=1)
         # Now add edges from each VNF to backup server
         for vnf in range (1, m+1):
             p1 = failure_probs[vnf]
             for backup_server in range(m+1, m+n+1):
                 p2 = failure_probs[backup_server]
                 w = int(math.log(1 / (1 - p1 * p2)) * 10e10)
-                G.add_edge(vnf, backup_server, weight=w, capacity=1, flow=0)
+                G.add_edge(vnf, backup_server, weight=w, capacity=1)
         # Now add edges from each backup server to the destination
         for backup_server in range(m+1, m+n+1):
-            G.add_edge(backup_server, m+n+1, weight=0, capacity=r, flow=0)
+            G.add_edge(backup_server, m+n+1, weight=0, capacity=r)
     genNodes(G)
     genEdges(G)
     print('Original Graph:')
@@ -117,6 +118,9 @@ def genNetwork(m, n, r, vnf_fail_prob, backup_server_fail_prob):
     plotGraph(G)
     return G
 
+# This will find the shortest path using the Q learning approach. It is a less
+# efficient alternative to Dijkstra. This was implemented soley for experimental
+# purposes.
 def shortestPath(G, m, n):
     def initQ(G):
         num_nodes = len(G.nodes)
@@ -138,8 +142,6 @@ def shortestPath(G, m, n):
         for node in range(m+1, m+n+1):
             R[node, m+n+1] = 100000000000000
         R = np.int_(R)
-        #print("Reward matrix")
-        #print(pd.DataFrame(data=R))
         return R
 
     def chooseNextNode(G, Q, current_node, thresh):
@@ -167,8 +169,6 @@ def shortestPath(G, m, n):
             source = random.choice(nodes) 
             next_node = chooseNextNode(G, Q, source, thresh)
             updateQ(G, source, next_node, Q, R, lr, discount)
-        #print("Q matrix after learning:")
-        #print(pd.DataFrame(data=Q))
 
     def shortest_path(G, source, dest, Q):
         path = [source]
@@ -193,16 +193,6 @@ def residualNetwork(G, path):
     for i in range(len(path)-1):
         node1 = path[i]
         node2 = path[i+1]
-        weight = G[node1][node2]['weight']
-        R.remove_edge(node1, node2)
-        R.add_edge(node2, node1, weight=-weight, capacity=1)
-    return R
-
-def residualNetwork2(G, path):
-    R = G.copy()
-    for i in range(len(path)-1):
-        node1 = path[i]
-        node2 = path[i+1]
         R[node1][node2]['capacity'] -= 1
         weight = G[node1][node2]['weight']
         if R[node1][node2]['capacity'] <= 0:
@@ -222,21 +212,15 @@ def succShortestPaths(G, m, n):
     shortest_paths = []
     for num_iters in range(m):
         # Can use dijkstra or Q learning approach
+        print(f'Iteration {num_iters}')
         shortest_path = nx.dijkstra_path(R, 0, m+n+1)
         shortest_paths.append(shortest_path)
-        print(f'\n{shortest_path}\n')
-        R = residualNetwork2(R, shortest_path)
+        print(f'shortest path: {shortest_path}\n')
+        R = residualNetwork(R, shortest_path)
         printGraph(R)
     return shortest_paths
 
-def findOptimalMapping(path):
-    optimal_mapping = []
-    for i in range(1, len(path)-1, 2):
-        optimal_mapping.append((path[i], path[i+1]))
-    print(optimal_mapping)
-    return optimal_mapping
-
-def findOptimalMapping2(paths):
+def findOptimalMapping(paths):
     optimal_mapping = []
     for path in paths:
         for i in range(1, len(path)-2):
@@ -247,14 +231,25 @@ def findOptimalMapping2(paths):
     print(optimal_mapping)
     return optimal_mapping
 
+# Now we want to compare our implementation of succShortestPaths with the 
+# networkx implementation of min cost flow to verify the corectness of the 
+# algorithm. 
 def test():
-    m = 4
-    n = 2 
+    m = 8
+    n = 4 
     r = 2
     f1 = lambda _: random.uniform(0, 0.02)
     f2 = lambda _: random.uniform(0, 0.1)
     G = genNetwork(m, n, r, f1, f2)
+    flow_dict = nx.min_cost_flow(G)
     final_paths = succShortestPaths(G, m, n)
-    findOptimalMapping2(final_paths) 
+    print("Successive shortest path vnf->backup_server mapping:")
+    findOptimalMapping(final_paths) 
+    print("networkx flow dict:")
+    print(flow_dict)
 
-test()
+def main():
+    test()
+
+if __name__ == "__main__":
+    test()
